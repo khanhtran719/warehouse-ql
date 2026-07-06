@@ -1,0 +1,19 @@
+{
+  "name": "warehouse-ql",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Warehouse CMS with NestJS API and React admin UI",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @warehouse/api --filter @warehouse/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

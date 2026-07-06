@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum VoucherStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum ExportType {
+  SALE
+  INTERNAL
+  DAMAGE
+}
+
+enum MovementType {
+  IMPORT
+  EXPORT
+  IMPORT_CANCEL
+  EXPORT_CANCEL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  passwordHash String
+  role         UserRole @default(STAFF)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdImports   StockImport[] @relation("ImportCreatedBy")
+  confirmedImports StockImport[] @relation("ImportConfirmedBy")
+  createdExports   StockExport[] @relation("ExportCreatedBy")
+  confirmedExports StockExport[] @relation("ExportConfirmedBy")
+}
+
+model Category {
+  id        String @id @default(cuid())
+  name      String @unique
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  products  Product[]
+}
+
+model Unit {
+  id        String @id @default(cuid())
+  name      String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  products  Product[]
+}
+
+model Product {
+  id               String @id @default(cuid())
+  code             String @unique
+  name             String
+  categoryId       String?
+  unitId           String?
+  currentStock     Decimal @default(0) @db.Decimal(18, 3)
+  averageCost      Decimal @default(0) @db.Decimal(18, 2)
+  defaultSalePrice Decimal @default(0) @db.Decimal(18, 2)
+  minStock         Decimal @default(0) @db.Decimal(18, 3)
+  status           RecordStatus @default(ACTIVE)
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  unit     Unit?     @relation(fields: [unitId], references: [id])
+  importItems StockImportItem[]
+  exportItems StockExportItem[]
+  movements   StockMovement[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model StockImport {
+  id          String @id @default(cuid())
+  code        String @unique
+  importDate  DateTime
+  status      VoucherStatus @default(DRAFT)
+  totalAmount Decimal @default(0) @db.Decimal(18, 2)
+  confirmedAt DateTime?
+  cancelledAt DateTime?
+  note        String?
+  createdById   String
+  confirmedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   User  @relation("ImportCreatedBy", fields: [createdById], references: [id])
+  confirmedBy User? @relation("ImportConfirmedBy", fields: [confirmedById], references: [id])
+  items StockImportItem[]
+
+  @@index([status, confirmedAt])
+  @@index([importDate])
+}
+
+model StockImportItem {
+  id            String @id @default(cuid())
+  stockImportId String
+  productId     String
+  quantity      Decimal @db.Decimal(18, 3)
+  unitPrice     Decimal @db.Decimal(18, 2)
+  totalAmount   Decimal @db.Decimal(18, 2)
+
+  stockImport StockImport @relation(fields: [stockImportId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+model StockExport {
+  id           String @id @default(cuid())
+  code         String @unique
+  exportDate   DateTime
+  exportType   ExportType @default(SALE)
+  status       VoucherStatus @default(DRAFT)
+  totalRevenue Decimal @default(0) @db.Decimal(18, 2)
+  totalCost    Decimal @default(0) @db.Decimal(18, 2)
+  totalProfit  Decimal @default(0) @db.Decimal(18, 2)
+  confirmedAt  DateTime?
+  cancelledAt  DateTime?
+  note         String?
+  createdById   String
+  confirmedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   User  @relation("ExportCreatedBy", fields: [createdById], references: [id])
+  confirmedBy User? @relation("ExportConfirmedBy", fields: [confirmedById], references: [id])
+  items StockExportItem[]
+
+  @@index([status, confirmedAt])
+  @@index([exportDate])
+  @@index([exportType])
+}
+
+model StockExportItem {
+  id            String @id @default(cuid())
+  stockExportId String
+  productId     String
+  quantity      Decimal @db.Decimal(18, 3)
+  salePrice     Decimal @db.Decimal(18, 2)
+  costPrice     Decimal @default(0) @db.Decimal(18, 2)
+  revenueAmount Decimal @default(0) @db.Decimal(18, 2)
+  costAmount    Decimal @default(0) @db.Decimal(18, 2)
+  profitAmount  Decimal @default(0) @db.Decimal(18, 2)
+
+  stockExport StockExport @relation(fields: [stockExportId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+model StockMovement {
+  id             String @id @default(cuid())
+  productId      String
+  movementType   MovementType
+  referenceType  String
+  referenceId    String
+  quantityChange Decimal @db.Decimal(18, 3)
+  stockBefore    Decimal @db.Decimal(18, 3)
+  stockAfter     Decimal @db.Decimal(18, 3)
+  costPrice      Decimal @default(0) @db.Decimal(18, 2)
+  createdById    String
+  createdAt      DateTime @default(now())
+  note           String?
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([referenceType, referenceId])
+}
