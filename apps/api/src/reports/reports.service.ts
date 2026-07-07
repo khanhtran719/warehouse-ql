@@ -1,40 +1,119 @@
 import { Injectable } from '@nestjs/common';
-import { ExportType, VoucherStatus } from '@prisma/client';
+import { ExportType, Prisma, VoucherStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
+
   async overview(fromText: string, toText: string) {
-    const from = new Date(fromText); const to = new Date(toText);
-    const [imports, exports, lowStock, topProducts] = await Promise.all([
-      this.prisma.stockImport.aggregate({ where: { status: VoucherStatus.CONFIRMED, confirmedAt: { gte: from, lte: to } }, _sum: { totalAmount: true }, _count: true }),
-      this.prisma.stockExport.aggregate({ where: { status: VoucherStatus.CONFIRMED, exportType: ExportType.SALE, confirmedAt: { gte: from, lte: to } }, _sum: { totalRevenue: true, totalCost: true, totalProfit: true }, _count: true }),
+    const range = this.toDateRange(fromText, toText);
+    const [importSummary, exportSummary, lowStock, topProducts] = await Promise.all([
+      this.getImportSummary(range),
+      this.getExportSummary(range),
       this.findLowStockProducts(),
-      this.prisma.stockExportItem.groupBy({ by: ['productId'], where: { stockExport: { status: VoucherStatus.CONFIRMED, exportType: ExportType.SALE, confirmedAt: { gte: from, lte: to } } }, _sum: { quantity: true, revenueAmount: true, profitAmount: true }, orderBy: { _sum: { revenueAmount: 'desc' } }, take: 10 }),
+      this.getTopProducts(range),
     ]);
-    const productMap = new Map((await this.prisma.product.findMany({ where: { id: { in: topProducts.map(p => p.productId) } } })).map(p => [p.id, p]));
+
+    const productMap = await this.getProductMap(topProducts.map((product) => product.productId));
+
     return {
-      totalImport: Number(imports._sum.totalAmount ?? 0), importCount: imports._count,
-      totalRevenue: Number(exports._sum.totalRevenue ?? 0), totalCost: Number(exports._sum.totalCost ?? 0), totalProfit: Number(exports._sum.totalProfit ?? 0), exportCount: exports._count,
+      totalImport: Number(importSummary._sum.totalAmount ?? 0),
+      importCount: importSummary._count,
+      totalRevenue: Number(exportSummary._sum.totalRevenue ?? 0),
+      totalCost: Number(exportSummary._sum.totalCost ?? 0),
+      totalProfit: Number(exportSummary._sum.totalProfit ?? 0),
+      exportCount: exportSummary._count,
       lowStock,
-      topProducts: topProducts.map(p => ({ product: productMap.get(p.productId), quantity: Number(p._sum.quantity ?? 0), revenue: Number(p._sum.revenueAmount ?? 0), profit: Number(p._sum.profitAmount ?? 0) })),
+      topProducts: topProducts.map((product) => ({
+        product: productMap.get(product.productId),
+        quantity: Number(product._sum.quantity ?? 0),
+        revenue: Number(product._sum.revenueAmount ?? 0),
+        profit: Number(product._sum.profitAmount ?? 0),
+      })),
     };
   }
 
   async daily(fromText: string, toText: string) {
-    const from = new Date(fromText); const to = new Date(toText);
-    const rows = await this.prisma.stockExport.findMany({ where: { status: VoucherStatus.CONFIRMED, exportType: ExportType.SALE, confirmedAt: { gte: from, lte: to } }, select: { confirmedAt: true, totalRevenue: true, totalCost: true, totalProfit: true }, orderBy: { confirmedAt: 'asc' } });
-    const map = new Map<string, { date: string; revenue: number; cost: number; profit: number }>();
-    rows.forEach(r => { const date = (r.confirmedAt ?? new Date()).toISOString().slice(0,10); const item = map.get(date) ?? { date, revenue: 0, cost: 0, profit: 0 }; item.revenue += Number(r.totalRevenue); item.cost += Number(r.totalCost); item.profit += Number(r.totalProfit); map.set(date, item); });
-    return [...map.values()];
+    const range = this.toDateRange(fromText, toText);
+    const rows = await this.prisma.stockExport.findMany({
+      where: this.confirmedSaleExportWhere(range),
+      select: { confirmedAt: true, totalRevenue: true, totalCost: true, totalProfit: true },
+      orderBy: { confirmedAt: 'asc' },
+    });
+
+    const dailyTotals = new Map<string, { date: string; revenue: number; cost: number; profit: number }>();
+
+    for (const row of rows) {
+      const date = (row.confirmedAt ?? new Date()).toISOString().slice(0, 10);
+      const current = dailyTotals.get(date) ?? { date, revenue: 0, cost: 0, profit: 0 };
+      current.revenue += Number(row.totalRevenue);
+      current.cost += Number(row.totalCost);
+      current.profit += Number(row.totalProfit);
+      dailyTotals.set(date, current);
+    }
+
+    return [...dailyTotals.values()];
+  }
+
+  private toDateRange(fromText: string, toText: string) {
+    return { from: new Date(fromText), to: new Date(toText) };
+  }
+
+  private getImportSummary(range: DateRange) {
+    return this.prisma.stockImport.aggregate({
+      where: { status: VoucherStatus.CONFIRMED, confirmedAt: { gte: range.from, lte: range.to } },
+      _sum: { totalAmount: true },
+      _count: true,
+    });
+  }
+
+  private getExportSummary(range: DateRange) {
+    return this.prisma.stockExport.aggregate({
+      where: this.confirmedSaleExportWhere(range),
+      _sum: { totalRevenue: true, totalCost: true, totalProfit: true },
+      _count: true,
+    });
+  }
+
+  private getTopProducts(range: DateRange) {
+    return this.prisma.stockExportItem.groupBy({
+      by: ['productId'],
+      where: { stockExport: this.confirmedSaleExportWhere(range) },
+      _sum: { quantity: true, revenueAmount: true, profitAmount: true },
+      orderBy: { _sum: { revenueAmount: 'desc' } },
+      take: 10,
+    });
+  }
+
+  private async getProductMap(productIds: string[]) {
+    const products = await this.prisma.product.findMany({ where: { id: { in: productIds } } });
+    return new Map(products.map((product) => [product.id, product]));
   }
 
   private async findLowStockProducts() {
-    const products = await this.prisma.product.findMany({ where: { status: 'ACTIVE' }, orderBy: { updatedAt: 'desc' }, take: 500 });
+    const products = await this.prisma.product.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+
     return products
-      .filter(product => Number(product.currentStock) <= Number(product.minStock))
+      .filter((product) => Number(product.currentStock) <= Number(product.minStock))
       .sort((a, b) => Number(a.currentStock) - Number(b.currentStock))
       .slice(0, 10);
   }
+
+  private confirmedSaleExportWhere(range: DateRange): Prisma.StockExportWhereInput {
+    return {
+      status: VoucherStatus.CONFIRMED,
+      exportType: ExportType.SALE,
+      confirmedAt: { gte: range.from, lte: range.to },
+    };
+  }
 }
+
+type DateRange = {
+  from: Date;
+  to: Date;
+};
