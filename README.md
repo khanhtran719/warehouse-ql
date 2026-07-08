@@ -69,3 +69,9 @@ Biến môi trường Docker có thể override:
 - `ADMIN_PASSWORD`: mật khẩu admin khi seed
 - `CORS_ORIGIN`: origin web được API cho phép
 - `VITE_API_URL`: URL API được build vào frontend
+
+## Deploy production
+
+Có thể deploy bằng cách build image, push lên Docker Hub, rồi server chỉ cần `docker-compose.yml` và `.env`, không cần pull source code.
+
+Xem hướng dẫn chi tiết: [`docs/deploy-docker-hub.md`](docs/deploy-docker-hub.md).
