@@ -88,6 +88,8 @@ export const api = {
   products: (params = '') => request<PaginatedResponse<Product>>(`/products${params}`),
   createProduct: (data: ProductInput) =>
     request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
+  updateProduct: (id: string, data: ProductInput) =>
+    request<Product>(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   categories: () => request<Category[]>('/categories'),
   units: () => request<Unit[]>('/units'),

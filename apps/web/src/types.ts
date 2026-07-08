@@ -33,10 +33,13 @@ export type Product = {
   id: string;
   code: string;
   name: string;
+  categoryId?: string | null;
+  unitId?: string | null;
   currentStock: Numeric;
   averageCost: Numeric;
   defaultSalePrice: Numeric;
   minStock: Numeric;
+  note?: string | null;
   category?: Category | null;
   unit?: Unit | null;
 };
@@ -44,8 +47,8 @@ export type Product = {
 export type ProductInput = {
   code: string;
   name: string;
-  categoryId?: string;
-  unitId?: string;
+  categoryId?: string | null;
+  unitId?: string | null;
   defaultSalePrice: number;
   minStock: number;
   note?: string;
