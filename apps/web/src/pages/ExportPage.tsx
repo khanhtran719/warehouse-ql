@@ -23,9 +23,9 @@ export function ExportPage() {
   return (
     <>
       <h1 className="page-title">Export phiếu xuất trong tháng</h1>
-      <div className="page-subtitle">Xuất Excel chi tiết từng dòng hàng của phiếu xuất đã xác nhận.</div>
+      <div className="page-subtitle">Xuất Excel chi tiết từng dòng hàng theo tháng xác nhận phiếu.</div>
       <Card style={{ maxWidth: 520 }}>
-        <Typography.Paragraph>Chọn tháng cần xuất dữ liệu:</Typography.Paragraph>
+        <Typography.Paragraph>Chọn tháng xác nhận phiếu cần xuất dữ liệu:</Typography.Paragraph>
         <DatePicker picker="month" value={value} onChange={(nextValue) => nextValue && setValue(nextValue)} style={{ width: '100%', marginBottom: 16 }} />
         <Button type="primary" onClick={exportExcel} loading={loading}>
           Tải Excel phiếu xuất

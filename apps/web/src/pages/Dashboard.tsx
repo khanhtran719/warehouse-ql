@@ -31,7 +31,7 @@ export function Dashboard() {
   return (
     <>
       <h1 className="page-title">Dashboard</h1>
-      <div className="page-subtitle">Tổng quan tháng hiện tại: nhập kho, bán hàng và lợi nhuận.</div>
+      <div className="page-subtitle">Tổng quan tháng hiện tại theo ngày xác nhận phiếu: nhập kho, bán hàng và lợi nhuận.</div>
 
       <Row gutter={[16, 16]}>
         <MetricCard title="Tổng tiền nhập" value={overviewData?.totalImport ?? 0} />

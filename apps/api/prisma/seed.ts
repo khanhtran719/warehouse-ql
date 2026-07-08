@@ -2,9 +2,11 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+const DEFAULT_DEV_ADMIN_PASSWORD = 'admin123456';
 
 async function main() {
-  const passwordHash = await bcrypt.hash('admin123456', 10);
+  const adminPassword = process.env.ADMIN_PASSWORD ?? getDevelopmentAdminPassword();
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
   await prisma.user.upsert({
     where: { username: 'admin' },
     update: {},
@@ -25,6 +27,13 @@ async function main() {
       minStock: 5,
     },
   });
+}
+
+function getDevelopmentAdminPassword() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ADMIN_PASSWORD is required when seeding in production');
+  }
+  return DEFAULT_DEV_ADMIN_PASSWORD;
 }
 
 main().finally(async () => prisma.$disconnect());

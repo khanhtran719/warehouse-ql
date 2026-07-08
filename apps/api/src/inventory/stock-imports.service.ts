@@ -51,10 +51,10 @@ export class StockImportsService {
   }
 
   async update(id: string, dto: CreateImportDto) {
-    const voucher = await this.findVoucherOrThrow(id);
-    this.ensureDraft(voucher);
-
     return this.prisma.$transaction(async (tx) => {
+      const voucher = await this.findLockedVoucherOrThrow(tx, id);
+      this.ensureDraft(voucher);
+
       await tx.stockImportItem.deleteMany({ where: { stockImportId: id } });
       return tx.stockImport.update({
         where: { id },
@@ -70,12 +70,13 @@ export class StockImportsService {
   }
 
   async confirm(id: string, userId: string) {
-    const voucher = await this.prisma.stockImport.findUnique({ where: { id }, include: { items: true } });
-    if (!voucher) throw new NotFoundException('Không tìm thấy phiếu nhập');
-    this.ensureDraft(voucher);
-    if (voucher.items.length === 0) throw new BadRequestException('Phiếu nhập chưa có hàng hoá');
-
     return this.prisma.$transaction(async (tx) => {
+      const voucher = await this.findLockedVoucherWithItemsOrThrow(tx, id);
+      this.ensureDraft(voucher);
+      if (voucher.items.length === 0) throw new BadRequestException('Phiếu nhập chưa có hàng hoá');
+
+      await this.lockProducts(tx, voucher.items.map((item) => item.productId));
+
       for (const item of voucher.items) {
         await this.applyImportItem(tx, voucher, item, userId);
       }
@@ -89,12 +90,14 @@ export class StockImportsService {
   }
 
   async cancel(id: string) {
-    const voucher = await this.findVoucherOrThrow(id);
-    this.ensureDraft(voucher, 'V1 chỉ huỷ phiếu nháp để giữ đúng giá vốn bình quân; phiếu đã xác nhận cần phiếu điều chỉnh riêng');
+    return this.prisma.$transaction(async (tx) => {
+      const voucher = await this.findLockedVoucherOrThrow(tx, id);
+      this.ensureDraft(voucher, 'V1 chỉ huỷ phiếu nháp để giữ đúng giá vốn bình quân; phiếu đã xác nhận cần phiếu điều chỉnh riêng');
 
-    return this.prisma.stockImport.update({
-      where: { id },
-      data: { status: VoucherStatus.CANCELLED, cancelledAt: new Date() },
+      return tx.stockImport.update({
+        where: { id },
+        data: { status: VoucherStatus.CANCELLED, cancelledAt: new Date() },
+      });
     });
   }
 
@@ -156,10 +159,25 @@ export class StockImportsService {
     });
   }
 
-  private async findVoucherOrThrow(id: string) {
-    const voucher = await this.prisma.stockImport.findUnique({ where: { id } });
+  private async findLockedVoucherOrThrow(tx: Prisma.TransactionClient, id: string) {
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "StockImport" WHERE id = ${id} FOR UPDATE`);
+    const voucher = await tx.stockImport.findUnique({ where: { id } });
     if (!voucher) throw new NotFoundException('Không tìm thấy phiếu nhập');
     return voucher;
+  }
+
+  private async findLockedVoucherWithItemsOrThrow(tx: Prisma.TransactionClient, id: string) {
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "StockImport" WHERE id = ${id} FOR UPDATE`);
+    const voucher = await tx.stockImport.findUnique({ where: { id }, include: { items: true } });
+    if (!voucher) throw new NotFoundException('Không tìm thấy phiếu nhập');
+    return voucher;
+  }
+
+  private async lockProducts(tx: Prisma.TransactionClient, productIds: string[]) {
+    const uniqueProductIds = [...new Set(productIds)].sort();
+    if (uniqueProductIds.length === 0) return;
+
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "Product" WHERE id IN (${Prisma.join(uniqueProductIds)}) ORDER BY id FOR UPDATE`);
   }
 
   private ensureDraft(voucher: StockImport, message = 'Phiếu nhập không còn ở trạng thái nháp') {

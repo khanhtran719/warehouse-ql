@@ -1,0 +1,13 @@
+.git
+.DS_Store
+.env
+.env.local
+**/.env
+**/.env.local
+coverage
+node_modules
+**/node_modules
+dist
+**/dist
+apps/web/tsconfig.tsbuildinfo
+*.log

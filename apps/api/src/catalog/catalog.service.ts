@@ -38,7 +38,14 @@ export class CatalogService {
 
   async updateProduct(id: string, dto: ProductDto) {
     await this.ensureProduct(id);
-    return this.prisma.product.update({ where: { id }, data: dto, include: { category: true, unit: true } });
+    try {
+      return await this.prisma.product.update({ where: { id }, data: dto, include: { category: true, unit: true } });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('Mã hàng đã tồn tại');
+      }
+      throw error;
+    }
   }
 
   getProduct(id: string) {
@@ -57,12 +64,26 @@ export class CatalogService {
     return this.prisma.unit.findMany({ orderBy: { name: 'asc' } });
   }
 
-  createCategory(dto: SimpleNameDto) {
-    return this.prisma.category.create({ data: dto });
+  async createCategory(dto: SimpleNameDto) {
+    try {
+      return await this.prisma.category.create({ data: dto });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('Nhóm hàng đã tồn tại');
+      }
+      throw error;
+    }
   }
 
-  createUnit(dto: SimpleNameDto) {
-    return this.prisma.unit.create({ data: dto });
+  async createUnit(dto: SimpleNameDto) {
+    try {
+      return await this.prisma.unit.create({ data: dto });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('Đơn vị tính đã tồn tại');
+      }
+      throw error;
+    }
   }
 
   private buildProductWhere(query: ListProductsDto): Prisma.ProductWhereInput {
