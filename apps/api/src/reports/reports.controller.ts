@@ -7,6 +7,10 @@ import { ReportsService } from './reports.service';
 @Controller('reports')
 export class ReportsController {
   constructor(private service: ReportsService) {}
-  @Get('overview') overview(@Query() q: DateRangeDto) { return this.service.overview(q.from, q.to); }
-  @Get('daily') daily(@Query() q: DateRangeDto) { return this.service.daily(q.from, q.to); }
+  @Get('overview') overview(@Query() q: DateRangeDto) {
+    return this.service.overview(q.from, q.to);
+  }
+  @Get('daily') daily(@Query() q: DateRangeDto) {
+    return this.service.daily(q.from, q.to);
+  }
 }

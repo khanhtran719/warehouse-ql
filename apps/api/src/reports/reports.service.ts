@@ -92,16 +92,14 @@ export class ReportsService {
   }
 
   private async findLowStockProducts() {
-    const products = await this.prisma.product.findMany({
-      where: { status: 'ACTIVE' },
-      orderBy: { updatedAt: 'desc' },
-      take: 500,
+    return this.prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        currentStock: { lte: this.prisma.product.fields.minStock },
+      },
+      orderBy: { currentStock: 'asc' },
+      take: 10,
     });
-
-    return products
-      .filter((product) => Number(product.currentStock) <= Number(product.minStock))
-      .sort((a, b) => Number(a.currentStock) - Number(b.currentStock))
-      .slice(0, 10);
   }
 
   private confirmedSaleExportWhere(range: DateRange): Prisma.StockExportWhereInput {

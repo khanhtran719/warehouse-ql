@@ -26,7 +26,9 @@ export function ReportsPage() {
   return (
     <>
       <h1 className="page-title">Báo cáo doanh thu</h1>
-      <div className="page-subtitle">Lọc theo ngày xác nhận phiếu; chỉ phiếu xuất SALE đã xác nhận được tính vào doanh thu/lợi nhuận.</div>
+      <div className="page-subtitle">
+        Lọc theo ngày xác nhận phiếu; chỉ phiếu xuất SALE đã xác nhận được tính vào doanh thu/lợi nhuận.
+      </div>
 
       <Card style={{ marginBottom: 16 }}>
         <Space wrap>

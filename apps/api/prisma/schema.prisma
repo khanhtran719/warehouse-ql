@@ -34,90 +34,159 @@ enum MovementType {
   EXPORT
   IMPORT_CANCEL
   EXPORT_CANCEL
+  ADJUSTMENT
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   name         String
-  username     String   @unique
+  username     String       @unique
   passwordHash String
-  role         UserRole @default(STAFF)
+  role         UserRole     @default(STAFF)
   status       RecordStatus @default(ACTIVE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  createdImports   StockImport[] @relation("ImportCreatedBy")
-  confirmedImports StockImport[] @relation("ImportConfirmedBy")
-  createdExports   StockExport[] @relation("ExportCreatedBy")
-  confirmedExports StockExport[] @relation("ExportConfirmedBy")
+  createdImports    StockImport[]           @relation("ImportCreatedBy")
+  confirmedImports  StockImport[]           @relation("ImportConfirmedBy")
+  createdExports    StockExport[]           @relation("ExportCreatedBy")
+  confirmedExports  StockExport[]           @relation("ExportConfirmedBy")
+  movements         StockMovement[]
+  importAttachments StockImportAttachment[]
+}
+
+model Customer {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  taxCode       String?
+  contactPerson String?
+  note          String?
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  exports StockExport[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model Supplier {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  taxCode       String?
+  contactPerson String?
+  note          String?
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  imports StockImport[]
+
+  @@index([name])
+  @@index([status])
 }
 
 model Category {
-  id        String @id @default(cuid())
-  name      String @unique
+  id        String       @id @default(cuid())
+  name      String       @unique
   status    RecordStatus @default(ACTIVE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
   products  Product[]
 }
 
 model Unit {
-  id        String @id @default(cuid())
-  name      String @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   products  Product[]
 }
 
 model Product {
-  id               String @id @default(cuid())
-  code             String @unique
+  id               String       @id @default(cuid())
+  code             String       @unique
   name             String
   categoryId       String?
   unitId           String?
-  currentStock     Decimal @default(0) @db.Decimal(18, 3)
-  averageCost      Decimal @default(0) @db.Decimal(18, 2)
-  defaultSalePrice Decimal @default(0) @db.Decimal(18, 2)
-  minStock         Decimal @default(0) @db.Decimal(18, 3)
+  currentStock     Decimal      @default(0) @db.Decimal(18, 3)
+  averageCost      Decimal      @default(0) @db.Decimal(18, 2)
+  defaultSalePrice Decimal      @default(0) @db.Decimal(18, 2)
+  minStock         Decimal      @default(0) @db.Decimal(18, 3)
   status           RecordStatus @default(ACTIVE)
   note             String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  category Category? @relation(fields: [categoryId], references: [id])
-  unit     Unit?     @relation(fields: [unitId], references: [id])
+  category    Category?         @relation(fields: [categoryId], references: [id])
+  unit        Unit?             @relation(fields: [unitId], references: [id])
   importItems StockImportItem[]
   exportItems StockExportItem[]
   movements   StockMovement[]
 
   @@index([name])
   @@index([status])
+  @@index([currentStock])
 }
 
 model StockImport {
-  id          String @id @default(cuid())
-  code        String @unique
-  importDate  DateTime
-  status      VoucherStatus @default(DRAFT)
-  totalAmount Decimal @default(0) @db.Decimal(18, 2)
-  confirmedAt DateTime?
-  cancelledAt DateTime?
-  note        String?
-  createdById   String
-  confirmedById String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String        @id @default(cuid())
+  code            String        @unique
+  importDate      DateTime
+  status          VoucherStatus @default(DRAFT)
+  totalAmount     Decimal       @default(0) @db.Decimal(18, 2)
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  note            String?
+  supplierId      String?
+  supplierName    String?
+  supplierAddress String?
+  supplierPhone   String?
+  supplierTaxCode String?
+  createdById     String
+  confirmedById   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  createdBy   User  @relation("ImportCreatedBy", fields: [createdById], references: [id])
-  confirmedBy User? @relation("ImportConfirmedBy", fields: [confirmedById], references: [id])
-  items StockImportItem[]
+  createdBy   User                    @relation("ImportCreatedBy", fields: [createdById], references: [id])
+  confirmedBy User?                   @relation("ImportConfirmedBy", fields: [confirmedById], references: [id])
+  supplier    Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items       StockImportItem[]
+  attachments StockImportAttachment[]
 
   @@index([status, confirmedAt])
   @@index([importDate])
+  @@index([supplierId])
+}
+
+model StockImportAttachment {
+  id            String   @id @default(cuid())
+  stockImportId String
+  originalName  String
+  storageKey    String   @unique
+  mimeType      String
+  size          Int
+  uploadedById  String
+  createdAt     DateTime @default(now())
+
+  stockImport StockImport @relation(fields: [stockImportId], references: [id], onDelete: Cascade)
+  uploadedBy  User        @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([stockImportId, createdAt])
+  @@index([uploadedById])
 }
 
 model StockImportItem {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   stockImportId String
   productId     String
   quantity      Decimal @db.Decimal(18, 3)
@@ -128,36 +197,45 @@ model StockImportItem {
   product     Product     @relation(fields: [productId], references: [id])
 
   @@index([productId])
+  @@index([stockImportId])
 }
 
 model StockExport {
-  id           String @id @default(cuid())
-  code         String @unique
-  exportDate   DateTime
-  exportType   ExportType @default(SALE)
-  status       VoucherStatus @default(DRAFT)
-  totalRevenue Decimal @default(0) @db.Decimal(18, 2)
-  totalCost    Decimal @default(0) @db.Decimal(18, 2)
-  totalProfit  Decimal @default(0) @db.Decimal(18, 2)
-  confirmedAt  DateTime?
-  cancelledAt  DateTime?
-  note         String?
-  createdById   String
-  confirmedById String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String        @id @default(cuid())
+  code            String        @unique
+  exportDate      DateTime
+  exportType      ExportType    @default(SALE)
+  status          VoucherStatus @default(DRAFT)
+  totalRevenue    Decimal       @default(0) @db.Decimal(18, 2)
+  totalCost       Decimal       @default(0) @db.Decimal(18, 2)
+  totalProfit     Decimal       @default(0) @db.Decimal(18, 2)
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  customerName    String?
+  customerAddress String?
+  customerId      String?
+  customerPhone   String?
+  customerTaxCode String?
+  note            String?
+  createdById     String
+  confirmedById   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  createdBy   User  @relation("ExportCreatedBy", fields: [createdById], references: [id])
-  confirmedBy User? @relation("ExportConfirmedBy", fields: [confirmedById], references: [id])
-  items StockExportItem[]
+  createdBy   User              @relation("ExportCreatedBy", fields: [createdById], references: [id])
+  confirmedBy User?             @relation("ExportConfirmedBy", fields: [confirmedById], references: [id])
+  customer    Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items       StockExportItem[]
 
   @@index([status, confirmedAt])
+  @@index([status, exportType, confirmedAt])
   @@index([exportDate])
   @@index([exportType])
+  @@index([customerId])
 }
 
 model StockExportItem {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   stockExportId String
   productId     String
   quantity      Decimal @db.Decimal(18, 3)
@@ -171,24 +249,27 @@ model StockExportItem {
   product     Product     @relation(fields: [productId], references: [id])
 
   @@index([productId])
+  @@index([stockExportId])
 }
 
 model StockMovement {
-  id             String @id @default(cuid())
+  id             String       @id @default(cuid())
   productId      String
   movementType   MovementType
   referenceType  String
   referenceId    String
-  quantityChange Decimal @db.Decimal(18, 3)
-  stockBefore    Decimal @db.Decimal(18, 3)
-  stockAfter     Decimal @db.Decimal(18, 3)
-  costPrice      Decimal @default(0) @db.Decimal(18, 2)
+  quantityChange Decimal      @db.Decimal(18, 3)
+  stockBefore    Decimal      @db.Decimal(18, 3)
+  stockAfter     Decimal      @db.Decimal(18, 3)
+  costPrice      Decimal      @default(0) @db.Decimal(18, 2)
   createdById    String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   note           String?
 
-  product Product @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+  createdBy User    @relation(fields: [createdById], references: [id])
 
   @@index([productId, createdAt])
+  @@index([createdById])
   @@index([referenceType, referenceId])
 }

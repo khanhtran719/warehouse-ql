@@ -1,6 +1,6 @@
 # Warehouse QL
 
-Web CMS quản lý 1 kho hàng hoá: nhập kho, xuất kho, tồn kho, báo cáo doanh thu/lợi nhuận và export Excel phiếu xuất theo tháng.
+Web CMS quản lý 1 kho hàng hoá: nhập kho, xuất kho, tồn kho, khách hàng/nhà cung cấp, ảnh chứng từ phiếu nhập, điều chỉnh tồn có audit, quản lý tài khoản/phân quyền, báo cáo doanh thu/lợi nhuận và export Excel phiếu xuất theo tháng.
 
 ## Stack
 
@@ -69,6 +69,9 @@ Biến môi trường Docker có thể override:
 - `ADMIN_PASSWORD`: mật khẩu admin khi seed
 - `CORS_ORIGIN`: origin web được API cho phép
 - `VITE_API_URL`: URL API được build vào frontend
+- `DELIVERY_COMPANY_NAME`, `DELIVERY_COMPANY_ADDRESS`, `DELIVERY_COMPANY_PHONE`: thông tin đơn vị in trên phiếu giao hàng
+- `DELIVERY_BANK_ACCOUNT`, `DELIVERY_BANK_ACCOUNT_NAME`, `DELIVERY_BANK_NAME`: thông tin thanh toán in trên phiếu giao hàng
+- `UPLOAD_DIR`: thư mục lưu ảnh chứng từ phiếu nhập; khi chạy Docker dữ liệu được giữ trong volume `warehouse_ql_uploads`
 
 ## Deploy production
 

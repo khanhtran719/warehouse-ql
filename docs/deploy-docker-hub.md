@@ -6,7 +6,7 @@ Tài liệu này dùng cho cách deploy production mà server Linux không cần
 
 - `postgres`: database PostgreSQL, lưu dữ liệu bằng Docker volume.
 - `migrate`: chạy Prisma migration trước khi API start.
-- `api`: NestJS API, expose nội bộ port `3000`.
+- `api`: NestJS API, expose nội bộ port `3000`; ảnh chứng từ được lưu trong Docker volume riêng.
 - `web`: React build chạy qua Nginx, expose nội bộ port `5173`.
 - `seed`: tool chạy một lần để tạo dữ liệu/tài khoản admin ban đầu.
 
@@ -79,6 +79,13 @@ API_DATABASE_URL=postgresql://postgres:change-this-postgres-password@postgres:54
 JWT_SECRET=change-this-to-a-long-random-secret
 ADMIN_PASSWORD=change-this-admin-password
 CORS_ORIGIN=https://kho.example.com
+DELIVERY_COMPANY_NAME=Tên doanh nghiệp
+DELIVERY_COMPANY_ADDRESS=Địa chỉ doanh nghiệp
+DELIVERY_COMPANY_PHONE=0900000000
+DELIVERY_BANK_ACCOUNT=0123456789
+DELIVERY_BANK_ACCOUNT_NAME=Tên chủ tài khoản
+DELIVERY_BANK_NAME=Tên ngân hàng
+UPLOAD_DIR=/app/uploads/import-receipts
 ```
 
 Tạo file `docker-compose.yml`:
@@ -96,7 +103,7 @@ services:
     volumes:
       - warehouse_ql_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d warehouse_ql"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d warehouse_ql']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -110,7 +117,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+    restart: 'no'
 
   api:
     image: ${DOCKERHUB_NAMESPACE}/warehouse-ql-api:${IMAGE_TAG}
@@ -123,8 +130,17 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DELIVERY_COMPANY_NAME: ${DELIVERY_COMPANY_NAME}
+      DELIVERY_COMPANY_ADDRESS: ${DELIVERY_COMPANY_ADDRESS}
+      DELIVERY_COMPANY_PHONE: ${DELIVERY_COMPANY_PHONE}
+      DELIVERY_BANK_ACCOUNT: ${DELIVERY_BANK_ACCOUNT}
+      DELIVERY_BANK_ACCOUNT_NAME: ${DELIVERY_BANK_ACCOUNT_NAME}
+      DELIVERY_BANK_NAME: ${DELIVERY_BANK_NAME}
+      UPLOAD_DIR: ${UPLOAD_DIR}
+    volumes:
+      - warehouse_ql_uploads:/app/uploads
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,14 +152,14 @@ services:
     container_name: warehouse-ql-web
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5173:80"
+      - '127.0.0.1:5173:80'
     depends_on:
       api:
         condition: service_healthy
 
   seed:
     image: ${DOCKERHUB_NAMESPACE}/warehouse-ql-tools:${IMAGE_TAG}
-    profiles: ["tools"]
+    profiles: ['tools']
     container_name: warehouse-ql-seed
     environment:
       NODE_ENV: production
@@ -155,10 +171,11 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    restart: "no"
+    restart: 'no'
 
 volumes:
   warehouse_ql_pgdata:
+  warehouse_ql_uploads:
 ```
 
 Nếu Docker Hub repo private, đăng nhập trên server trước khi pull:
@@ -276,6 +293,15 @@ docker compose exec postgres pg_dump -U postgres -d warehouse_ql > warehouse_ql_
 ```
 
 Nên backup trước mỗi lần update production có migration.
+
+Backup riêng ảnh chứng từ trong volume của API:
+
+```bash
+docker run --rm --volumes-from warehouse-ql-api -v "$PWD":/backup alpine \
+  tar -czf /backup/warehouse_ql_uploads_$(date +%Y%m%d_%H%M%S).tar.gz -C /app uploads
+```
+
+Database backup không chứa file ảnh; cần giữ cả hai bản backup để khôi phục đầy đủ phiếu nhập.
 
 ## Kiểm Tra Và Logs
 

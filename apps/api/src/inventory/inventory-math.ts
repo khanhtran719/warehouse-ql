@@ -1,19 +1,26 @@
+import { Prisma } from '@prisma/client';
+
 export type WeightedAverageInput = { stock: number; averageCost: number; quantity: number; unitPrice: number };
 
 export function weightedAverageCost(input: WeightedAverageInput): number {
   const { stock, averageCost, quantity, unitPrice } = input;
   if (quantity <= 0) throw new Error('Số lượng nhập phải lớn hơn 0');
-  const nextStock = stock + quantity;
-  if (nextStock <= 0) return 0;
-  return roundMoney(((stock * averageCost) + (quantity * unitPrice)) / nextStock);
+  const nextStock = decimal(stock).plus(quantity);
+  if (nextStock.lte(0)) return 0;
+  return decimal(stock)
+    .mul(averageCost)
+    .plus(decimal(quantity).mul(unitPrice))
+    .div(nextStock)
+    .toDecimalPlaces(2)
+    .toNumber();
 }
 
 export function roundMoney(value: number): number {
-  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  return decimal(value).toDecimalPlaces(2).toNumber();
 }
 
 export function roundQty(value: number): number {
-  return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
+  return decimal(value).toDecimalPlaces(3).toNumber();
 }
 
 export function assertCanExport(productName: string, currentStock: number, requestedQty: number) {
@@ -24,5 +31,9 @@ export function assertCanExport(productName: string, currentStock: number, reque
 }
 
 export function sumLineAmount(quantity: number, price: number): number {
-  return roundMoney(quantity * price);
+  return decimal(quantity).mul(price).toDecimalPlaces(2).toNumber();
+}
+
+function decimal(value: number | Prisma.Decimal) {
+  return new Prisma.Decimal(value);
 }

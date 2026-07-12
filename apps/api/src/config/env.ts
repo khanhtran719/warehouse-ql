@@ -2,8 +2,23 @@ import { ConfigService } from '@nestjs/config';
 
 type Env = Record<string, string | undefined>;
 
-const REQUIRED_KEYS = ['DATABASE_URL', 'JWT_SECRET', 'CORS_ORIGIN'] as const;
-const UNSAFE_PRODUCTION_VALUES = new Set(['dev-secret', 'change-me-in-production', 'change-me']);
+const REQUIRED_KEYS = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'CORS_ORIGIN',
+  'DELIVERY_COMPANY_NAME',
+  'DELIVERY_COMPANY_ADDRESS',
+  'DELIVERY_COMPANY_PHONE',
+  'DELIVERY_BANK_ACCOUNT',
+  'DELIVERY_BANK_ACCOUNT_NAME',
+  'DELIVERY_BANK_NAME',
+] as const;
+const UNSAFE_PRODUCTION_VALUES = new Set([
+  'dev-secret',
+  'change-me-in-production',
+  'change-me',
+  'local-docker-jwt-secret-change-before-production',
+]);
 
 export function validateEnv(config: Env) {
   for (const key of REQUIRED_KEYS) {

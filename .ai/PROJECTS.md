@@ -24,6 +24,8 @@
 - `apps/api/src/catalog`: products, categories, units, product movements.
 - `apps/api/src/inventory`: stock imports, stock exports, voucher confirmation, inventory math.
 - `apps/api/src/reports`: overview, daily reports, low-stock/top-product data.
+- `apps/api/src/users`: admin-only account creation, role/status management, and password reset.
+- `apps/api/src/partners`: customer and supplier master data used by inventory vouchers.
 - `apps/api/src/prisma`: Prisma service/module.
 - `apps/api/src/common`: pagination, current-user decorator, roles guard/decorator.
 - `apps/api/src/config`: environment validation.
@@ -42,13 +44,14 @@
 - `apps/web/src/pages/VoucherForm.tsx`: shared import/export voucher form.
 - `apps/web/src/pages/ReportsPage.tsx`: reports UI.
 - `apps/web/src/pages/Dashboard.tsx`: dashboard UI.
+- `apps/web/src/pages/UsersPage.tsx`: admin-only user and role management.
 - `apps/web/src/components/PageHeader.tsx`: common page header.
 - `apps/web/src/format.ts`: formatting and label helpers.
 - `apps/web/src/errors.ts`: user-facing error handling.
 
 ## Runtime Shape
 
-- PostgreSQL stores users, categories, units, products, import vouchers, export vouchers, items, and stock movements.
+- PostgreSQL stores users, partners, categories, units, products, vouchers, attachment metadata, items, and stock movements. Receipt image binaries live in `UPLOAD_DIR`.
 - API reads env from `apps/api/.env` in local development.
 - Docker Compose can override runtime env via root `.env` variables.
 - Web uses `VITE_API_URL`, which is build-time configuration in the Vite bundle.
@@ -59,6 +62,7 @@
 
 - Catalog owns product code/name/category/unit/default sale price/min stock/note and category/unit creation.
 - Inventory owns voucher creation and confirmation, stock movement rows, stock quantity changes, and average cost updates.
+- Physical stock corrections use the admin-only stock-adjustment endpoint and always append an `ADJUSTMENT` movement.
 - Reports owns read-only aggregation for overview/daily/low-stock/top-product views.
 - Auth owns user identity, JWT issuance, current-user lookup, and route protection.
 

@@ -8,11 +8,11 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: warehouse_ql
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - warehouse_ql_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d warehouse_ql"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d warehouse_ql']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -29,7 +29,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+    restart: 'no'
 
   api:
     build:
@@ -45,8 +45,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-local-docker-jwt-secret-change-before-production}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123456}
+      DELIVERY_COMPANY_NAME: ${DELIVERY_COMPANY_NAME:-NPP PHONG VÂN PHÁT}
+      DELIVERY_COMPANY_ADDRESS: ${DELIVERY_COMPANY_ADDRESS:-Tổ 12, KP 5A, Trảng Dài, Đồng Nai}
+      DELIVERY_COMPANY_PHONE: ${DELIVERY_COMPANY_PHONE:-0839650939}
+      DELIVERY_BANK_ACCOUNT: ${DELIVERY_BANK_ACCOUNT:-8858064483}
+      DELIVERY_BANK_ACCOUNT_NAME: ${DELIVERY_BANK_ACCOUNT_NAME:-Hộ kinh doanh Phong Vân Phát}
+      DELIVERY_BANK_NAME: ${DELIVERY_BANK_NAME:-Ngân hàng BIDV}
+      UPLOAD_DIR: /app/uploads/import-receipts
+    volumes:
+      - warehouse_ql_uploads:/app/uploads
     ports:
-      - "3000:3000"
+      - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,14 +72,14 @@ services:
     container_name: warehouse-ql-web
     restart: unless-stopped
     ports:
-      - "5173:80"
+      - '5173:80'
     depends_on:
       api:
         condition: service_healthy
 
   seed:
     image: warehouse-ql-api-tools:local
-    profiles: ["tools"]
+    profiles: ['tools']
     container_name: warehouse-ql-seed
     environment:
       NODE_ENV: production
@@ -82,7 +91,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    restart: "no"
+    restart: 'no'
 
 volumes:
   warehouse_ql_pgdata:
+  warehouse_ql_uploads:

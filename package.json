@@ -9,6 +9,7 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "docker:build": "scripts/build-docker.sh build",
     "docker:up": "scripts/build-docker.sh up",
     "docker:migrate": "scripts/build-docker.sh migrate",

@@ -26,7 +26,12 @@ export function ExportPage() {
       <div className="page-subtitle">Xuất Excel chi tiết từng dòng hàng theo tháng xác nhận phiếu.</div>
       <Card style={{ maxWidth: 520 }}>
         <Typography.Paragraph>Chọn tháng xác nhận phiếu cần xuất dữ liệu:</Typography.Paragraph>
-        <DatePicker picker="month" value={value} onChange={(nextValue) => nextValue && setValue(nextValue)} style={{ width: '100%', marginBottom: 16 }} />
+        <DatePicker
+          picker="month"
+          value={value}
+          onChange={(nextValue) => nextValue && setValue(nextValue)}
+          style={{ width: '100%', marginBottom: 16 }}
+        />
         <Button type="primary" onClick={exportExcel} loading={loading}>
           Tải Excel phiếu xuất
         </Button>

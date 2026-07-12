@@ -19,6 +19,29 @@ export type User = {
   role: 'ADMIN' | 'STAFF';
 };
 
+export type ManagedUser = User & {
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Partner = {
+  id: string;
+  code: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  taxCode?: string | null;
+  contactPerson?: string | null;
+  note?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerInput = Omit<Partner, 'id' | 'createdAt' | 'updatedAt'>;
+
 export type Category = {
   id: string;
   name: string;
@@ -42,6 +65,19 @@ export type Product = {
   note?: string | null;
   category?: Category | null;
   unit?: Unit | null;
+};
+
+export type StockMovement = {
+  id: string;
+  movementType: 'IMPORT' | 'EXPORT' | 'IMPORT_CANCEL' | 'EXPORT_CANCEL' | 'ADJUSTMENT';
+  referenceType: string;
+  referenceId: string;
+  quantityChange: Numeric;
+  stockBefore: Numeric;
+  stockAfter: Numeric;
+  costPrice: Numeric;
+  createdAt: string;
+  note?: string | null;
 };
 
 export type ProductInput = {
@@ -75,8 +111,24 @@ export type StockImport = {
   importDate: string;
   status: VoucherStatus;
   totalAmount: Numeric;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  supplierAddress?: string | null;
+  supplierPhone?: string | null;
+  supplierTaxCode?: string | null;
+  note?: string | null;
   items: StockImportItem[];
+  attachments: ImportAttachment[];
   createdBy?: Pick<User, 'name'>;
+};
+
+export type ImportAttachment = {
+  id: string;
+  stockImportId: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
 };
 
 export type StockExportItem = {
@@ -100,12 +152,23 @@ export type StockExport = {
   totalRevenue: Numeric;
   totalCost: Numeric;
   totalProfit: Numeric;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  customerPhone?: string | null;
+  customerTaxCode?: string | null;
+  note?: string | null;
   items: StockExportItem[];
   createdBy?: Pick<User, 'name'>;
 };
 
 export type CreateImportInput = {
   importDate: string;
+  supplierId?: string;
+  supplierName?: string;
+  supplierAddress?: string;
+  supplierPhone?: string;
+  supplierTaxCode?: string;
   note?: string;
   items: VoucherItemInput[];
 };
@@ -113,6 +176,11 @@ export type CreateImportInput = {
 export type CreateExportInput = {
   exportDate: string;
   exportType: ExportType;
+  customerId?: string;
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  customerTaxCode?: string;
   note?: string;
   items: VoucherItemInput[];
 };

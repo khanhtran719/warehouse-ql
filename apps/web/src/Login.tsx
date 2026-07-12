@@ -2,6 +2,7 @@ import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { Button, Card, Form, Input, Typography, message } from 'antd';
 import { api, setToken } from './api';
 import { getErrorMessage } from './errors';
+import type { User } from './types';
 
 const developmentInitialValues = import.meta.env.DEV ? { username: 'admin', password: 'admin123456' } : undefined;
 
@@ -10,7 +11,7 @@ type LoginFormValues = {
   password: string;
 };
 
-export function Login({ onLogin }: { onLogin: () => void }) {
+export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [form] = Form.useForm<LoginFormValues>();
 
   async function submit(values: LoginFormValues) {
@@ -18,7 +19,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
       const response = await api.login(values.username, values.password);
       setToken(response.accessToken);
       message.success('Đăng nhập thành công');
-      onLogin();
+      onLogin(response.user);
     } catch (error) {
       message.error(getErrorMessage(error));
     }
@@ -41,7 +42,11 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <Form.Item name="username" label="Tài khoản" rules={[{ required: true, message: 'Nhập tài khoản' }]}>
             <Input prefix={<UserOutlined />} autoComplete="username" />
           </Form.Item>
-          <Form.Item name="password" label="Mật khẩu" rules={[{ required: true, min: 6, message: 'Mật khẩu tối thiểu 6 ký tự' }]}>
+          <Form.Item
+            name="password"
+            label="Mật khẩu"
+            rules={[{ required: true, min: 6, message: 'Mật khẩu tối thiểu 6 ký tự' }]}
+          >
             <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
           </Form.Item>
           <Button type="primary" htmlType="submit" block size="large">

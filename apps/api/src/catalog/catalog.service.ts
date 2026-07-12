@@ -95,10 +95,7 @@ export class CatalogService {
   }
 
   private searchProductByCodeOrName(search: string): Prisma.ProductWhereInput[] {
-    return [
-      { code: { contains: search, mode: 'insensitive' } },
-      { name: { contains: search, mode: 'insensitive' } },
-    ];
+    return [{ code: { contains: search, mode: 'insensitive' } }, { name: { contains: search, mode: 'insensitive' } }];
   }
 
   private async ensureProduct(id: string) {

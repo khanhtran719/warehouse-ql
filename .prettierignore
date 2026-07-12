@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+apps/api/generated
+apps/web/dist
+*.tsbuildinfo
+.understand-anything
+templates
+pnpm-lock.yaml

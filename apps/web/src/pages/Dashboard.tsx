@@ -31,7 +31,9 @@ export function Dashboard() {
   return (
     <>
       <h1 className="page-title">Dashboard</h1>
-      <div className="page-subtitle">Tổng quan tháng hiện tại theo ngày xác nhận phiếu: nhập kho, bán hàng và lợi nhuận.</div>
+      <div className="page-subtitle">
+        Tổng quan tháng hiện tại theo ngày xác nhận phiếu: nhập kho, bán hàng và lợi nhuận.
+      </div>
 
       <Row gutter={[16, 16]}>
         <MetricCard title="Tổng tiền nhập" value={overviewData?.totalImport ?? 0} />
@@ -59,7 +61,14 @@ export function Dashboard() {
         </Col>
         <Col xs={24} lg={9}>
           <Card title="Top sản phẩm bán chạy">
-            <Table rowKey={(row) => row.product?.id ?? row.product?.code ?? row.product?.name ?? 'unknown'} size="small" pagination={false} dataSource={overviewData?.topProducts ?? []} columns={topProductColumns} />
+            <Table
+              rowKey={(row) => row.product?.id ?? row.product?.code ?? row.product?.name ?? 'unknown'}
+              size="small"
+              pagination={false}
+              dataSource={overviewData?.topProducts ?? []}
+              columns={topProductColumns}
+              scroll={{ x: 360 }}
+            />
           </Card>
         </Col>
       </Row>
@@ -71,7 +80,10 @@ export function Dashboard() {
           dataSource={overviewData?.lowStock ?? []}
           pagination={false}
           columns={lowStockColumns}
-          locale={{ emptyText: <Typography.Text type="secondary">Chưa có sản phẩm dưới tồn tối thiểu.</Typography.Text> }}
+          scroll={{ x: 520 }}
+          locale={{
+            emptyText: <Typography.Text type="secondary">Chưa có sản phẩm dưới tồn tối thiểu.</Typography.Text>,
+          }}
         />
       </Card>
     </>

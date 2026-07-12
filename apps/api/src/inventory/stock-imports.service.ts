@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { toPagination } from '../common/pagination.dto';
 import { CreateImportDto, ListVoucherDto, VoucherItemDto } from './dto';
 import { roundMoney, roundQty, sumLineAmount, weightedAverageCost } from './inventory-math';
+import { generateVoucherCode } from './voucher-code';
 
 @Injectable()
 export class StockImportsService {
@@ -15,7 +16,11 @@ export class StockImportsService {
     const [data, totalItems] = await Promise.all([
       this.prisma.stockImport.findMany({
         where,
-        include: { createdBy: { select: { name: true } }, items: { include: { product: true } } },
+        include: {
+          createdBy: { select: { name: true } },
+          items: { include: { product: true } },
+          attachments: { orderBy: { createdAt: 'asc' } },
+        },
         orderBy: { importDate: 'desc' },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -29,24 +34,30 @@ export class StockImportsService {
   get(id: string) {
     return this.prisma.stockImport.findUnique({
       where: { id },
-      include: { items: { include: { product: true } }, createdBy: { select: { name: true } } },
+      include: {
+        items: { include: { product: true } },
+        createdBy: { select: { name: true } },
+        attachments: { orderBy: { createdAt: 'asc' } },
+      },
     });
   }
 
   async create(dto: CreateImportDto, userId: string) {
-    const code = await this.nextCode('PN');
+    const code = generateVoucherCode('PN');
     const totalAmount = this.calculateTotalAmount(dto.items);
+    const supplier = await this.resolveSupplier(dto);
 
     return this.prisma.stockImport.create({
       data: {
         code,
         importDate: new Date(dto.importDate),
         note: dto.note,
+        ...supplier,
         createdById: userId,
         totalAmount,
         items: { create: this.toImportItemCreates(dto.items) },
       },
-      include: { items: true },
+      include: { items: true, attachments: true },
     });
   }
 
@@ -54,6 +65,7 @@ export class StockImportsService {
     return this.prisma.$transaction(async (tx) => {
       const voucher = await this.findLockedVoucherOrThrow(tx, id);
       this.ensureDraft(voucher);
+      const supplier = await this.resolveSupplier(dto, tx);
 
       await tx.stockImportItem.deleteMany({ where: { stockImportId: id } });
       return tx.stockImport.update({
@@ -61,10 +73,11 @@ export class StockImportsService {
         data: {
           importDate: new Date(dto.importDate),
           note: dto.note,
+          ...supplier,
           totalAmount: this.calculateTotalAmount(dto.items),
           items: { create: this.toImportItemCreates(dto.items) },
         },
-        include: { items: true },
+        include: { items: true, attachments: true },
       });
     });
   }
@@ -75,7 +88,10 @@ export class StockImportsService {
       this.ensureDraft(voucher);
       if (voucher.items.length === 0) throw new BadRequestException('Phiếu nhập chưa có hàng hoá');
 
-      await this.lockProducts(tx, voucher.items.map((item) => item.productId));
+      await this.lockProducts(
+        tx,
+        voucher.items.map((item) => item.productId),
+      );
 
       for (const item of voucher.items) {
         await this.applyImportItem(tx, voucher, item, userId);
@@ -84,7 +100,7 @@ export class StockImportsService {
       return tx.stockImport.update({
         where: { id },
         data: { status: VoucherStatus.CONFIRMED, confirmedAt: new Date(), confirmedById: userId },
-        include: { items: { include: { product: true } } },
+        include: { items: { include: { product: true } }, attachments: { orderBy: { createdAt: 'asc' } } },
       });
     });
   }
@@ -92,7 +108,10 @@ export class StockImportsService {
   async cancel(id: string) {
     return this.prisma.$transaction(async (tx) => {
       const voucher = await this.findLockedVoucherOrThrow(tx, id);
-      this.ensureDraft(voucher, 'V1 chỉ huỷ phiếu nháp để giữ đúng giá vốn bình quân; phiếu đã xác nhận cần phiếu điều chỉnh riêng');
+      this.ensureDraft(
+        voucher,
+        'V1 chỉ huỷ phiếu nháp để giữ đúng giá vốn bình quân; phiếu đã xác nhận cần phiếu điều chỉnh riêng',
+      );
 
       return tx.stockImport.update({
         where: { id },
@@ -105,13 +124,41 @@ export class StockImportsService {
     return {
       ...(query.status ? { status: query.status } : {}),
       ...(query.from || query.to
-        ? { importDate: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } }
+        ? {
+            importDate: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
         : {}),
     };
   }
 
   private calculateTotalAmount(items: VoucherItemDto[]) {
     return roundMoney(items.reduce((sum, item) => sum + sumLineAmount(item.quantity, item.unitPrice), 0));
+  }
+
+  private async resolveSupplier(dto: CreateImportDto, client: Prisma.TransactionClient | PrismaService = this.prisma) {
+    if (!dto.supplierId) {
+      return {
+        supplierId: null,
+        supplierName: dto.supplierName?.trim() || null,
+        supplierAddress: dto.supplierAddress?.trim() || null,
+        supplierPhone: dto.supplierPhone?.trim() || null,
+        supplierTaxCode: dto.supplierTaxCode?.trim() || null,
+      };
+    }
+
+    const supplier = await client.supplier.findUnique({ where: { id: dto.supplierId } });
+    if (!supplier) throw new NotFoundException('Không tìm thấy nhà cung cấp');
+    if (supplier.status !== 'ACTIVE') throw new ConflictException('Nhà cung cấp đã ngừng hoạt động');
+    return {
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      supplierAddress: supplier.address,
+      supplierPhone: supplier.phone,
+      supplierTaxCode: supplier.taxCode,
+    };
   }
 
   private toImportItemCreates(items: VoucherItemDto[]) {
@@ -177,16 +224,14 @@ export class StockImportsService {
     const uniqueProductIds = [...new Set(productIds)].sort();
     if (uniqueProductIds.length === 0) return;
 
-    await tx.$queryRaw(Prisma.sql`SELECT id FROM "Product" WHERE id IN (${Prisma.join(uniqueProductIds)}) ORDER BY id FOR UPDATE`);
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM "Product" WHERE id IN (${Prisma.join(uniqueProductIds)}) ORDER BY id FOR UPDATE`,
+    );
   }
 
   private ensureDraft(voucher: StockImport, message = 'Phiếu nhập không còn ở trạng thái nháp') {
     if (voucher.status !== VoucherStatus.DRAFT) {
       throw new ConflictException(message);
     }
-  }
-
-  private async nextCode(prefix: string) {
-    return `${prefix}${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-6)}`;
   }
 }

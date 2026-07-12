@@ -7,6 +7,8 @@ import { InventoryModule } from './inventory/inventory.module';
 import { ReportsModule } from './reports/reports.module';
 import { validateEnv } from './config/env';
 import { HealthController } from './health.controller';
+import { UsersModule } from './users/users.module';
+import { PartnersModule } from './partners/partners.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { HealthController } from './health.controller';
     CatalogModule,
     InventoryModule,
     ReportsModule,
+    UsersModule,
+    PartnersModule,
   ],
   controllers: [HealthController],
 })

@@ -1,14 +1,20 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ExportType, Prisma, Product, StockExport, StockExportItem, VoucherStatus } from '@prisma/client';
-import ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { toPagination } from '../common/pagination.dto';
 import { CreateExportDto, ExportExcelDto, ListExportDto, VoucherItemDto } from './dto';
 import { assertCanExport, roundMoney, roundQty, sumLineAmount } from './inventory-math';
+import { generateVoucherCode } from './voucher-code';
+import { buildDeliveryWorkbook, deliveryFileName, readDeliveryCompanyProfile } from './delivery-workbook';
+import { buildMonthlyExportWorkbook } from './monthly-export-workbook';
 
 @Injectable()
 export class StockExportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private config: ConfigService,
+  ) {}
 
   async list(query: ListExportDto) {
     const where = this.buildWhere(query);
@@ -16,7 +22,10 @@ export class StockExportsService {
     const [data, totalItems] = await Promise.all([
       this.prisma.stockExport.findMany({
         where,
-        include: { createdBy: { select: { name: true } }, items: { include: { product: true } } },
+        include: {
+          createdBy: { select: { name: true } },
+          items: { include: { product: true } },
+        },
         orderBy: { exportDate: 'desc' },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -24,51 +33,67 @@ export class StockExportsService {
       this.prisma.stockExport.count({ where }),
     ]);
 
-    return { data, pagination: toPagination(query.page, query.pageSize, totalItems) };
+    return {
+      data,
+      pagination: toPagination(query.page, query.pageSize, totalItems),
+    };
   }
 
   get(id: string) {
     return this.prisma.stockExport.findUnique({
       where: { id },
-      include: { items: { include: { product: true } }, createdBy: { select: { name: true } } },
+      include: {
+        items: { include: { product: true } },
+        createdBy: { select: { name: true } },
+      },
     });
   }
 
   async create(dto: CreateExportDto, userId: string) {
-    const code = await this.nextCode('PX');
+    const code = generateVoucherCode('PX');
     const totalRevenue = this.calculateRevenue(dto.exportType, dto.items);
+    const customer = await this.resolveCustomer(dto);
 
     return this.prisma.stockExport.create({
       data: {
         code,
         exportDate: new Date(dto.exportDate),
         exportType: dto.exportType,
+        ...customer,
         note: dto.note,
         createdById: userId,
         totalRevenue,
-        items: { create: this.toExportItemCreates(dto.exportType, dto.items) },
+        items: {
+          create: this.toExportItemCreates(dto.exportType, dto.items),
+        },
       },
-      include: { items: true },
+      include: this.deliveryVoucherInclude(),
     });
   }
 
   async update(id: string, dto: CreateExportDto) {
     return this.prisma.$transaction(async (tx) => {
-      const voucher = await this.findLockedVoucherOrThrow(tx, id);
-      this.ensureDraft(voucher, 'Chỉ được sửa phiếu nháp');
+      const existingVoucher = await this.findLockedVoucherOrThrow(tx, id);
+      this.ensureDraft(existingVoucher, 'Chỉ được sửa phiếu nháp');
+      const customer = await this.resolveCustomer(dto, tx);
 
       await tx.stockExportItem.deleteMany({ where: { stockExportId: id } });
-      return tx.stockExport.update({
+      const updatedVoucher = await tx.stockExport.update({
         where: { id },
         data: {
           exportDate: new Date(dto.exportDate),
           exportType: dto.exportType,
+          ...customer,
           note: dto.note,
           totalRevenue: this.calculateRevenue(dto.exportType, dto.items),
-          items: { create: this.toExportItemCreates(dto.exportType, dto.items) },
+          items: {
+            create: this.toExportItemCreates(dto.exportType, dto.items),
+          },
         },
-        include: { items: true },
+        include: this.deliveryVoucherInclude(),
       });
+
+      return updatedVoucher;
     });
   }
 
@@ -122,7 +147,7 @@ export class StockExportsService {
     const from = new Date(Date.UTC(query.year, query.month - 1, 1));
     const to = new Date(Date.UTC(query.year, query.month, 1));
     const rows = await this.findMonthlyExportRows(from, to);
-    const workbook = this.buildExportWorkbook(rows);
+    const workbook = buildMonthlyExportWorkbook(rows);
     const buffer = await workbook.xlsx.writeBuffer();
 
     return new StreamableFile(Buffer.from(buffer), {
@@ -131,13 +156,55 @@ export class StockExportsService {
     });
   }
 
+  async downloadDeliveryFile(id: string) {
+    const voucher = await this.findExportForFileOrThrow(id);
+    if (voucher.status === VoucherStatus.CANCELLED) {
+      throw new ConflictException('Không thể tải phiếu giao hàng đã huỷ');
+    }
+    const workbook = buildDeliveryWorkbook(voucher, readDeliveryCompanyProfile(this.config));
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    return new StreamableFile(Buffer.from(buffer), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition: `attachment; filename=${deliveryFileName(voucher.code)}`,
+    });
+  }
+
   private buildWhere(query: ListExportDto): Prisma.StockExportWhereInput {
     return {
       ...(query.status ? { status: query.status } : {}),
       ...(query.exportType ? { exportType: query.exportType } : {}),
       ...(query.from || query.to
-        ? { exportDate: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } }
+        ? {
+            exportDate: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
         : {}),
+    };
+  }
+
+  private async resolveCustomer(dto: CreateExportDto, client: Prisma.TransactionClient | PrismaService = this.prisma) {
+    if (!dto.customerId) {
+      return {
+        customerId: null,
+        customerName: dto.customerName?.trim() || null,
+        customerAddress: dto.customerAddress?.trim() || null,
+        customerPhone: dto.customerPhone?.trim() || null,
+        customerTaxCode: dto.customerTaxCode?.trim() || null,
+      };
+    }
+
+    const customer = await client.customer.findUnique({ where: { id: dto.customerId } });
+    if (!customer) throw new NotFoundException('Không tìm thấy khách hàng');
+    if (customer.status !== 'ACTIVE') throw new ConflictException('Khách hàng đã ngừng hoạt động');
+    return {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerAddress: customer.address,
+      customerPhone: customer.phone,
+      customerTaxCode: customer.taxCode,
     };
   }
 
@@ -159,14 +226,19 @@ export class StockExportsService {
     const requestedByProduct = new Map<string, number>();
 
     for (const item of items) {
-      requestedByProduct.set(item.productId, roundQty((requestedByProduct.get(item.productId) ?? 0) + Number(item.quantity)));
+      requestedByProduct.set(
+        item.productId,
+        roundQty((requestedByProduct.get(item.productId) ?? 0) + Number(item.quantity)),
+      );
     }
 
     return requestedByProduct;
   }
 
   private async findProductsOrThrow(tx: Prisma.TransactionClient, requestedByProduct: Map<string, number>) {
-    const products = await tx.product.findMany({ where: { id: { in: [...requestedByProduct.keys()] } } });
+    const products = await tx.product.findMany({
+      where: { id: { in: [...requestedByProduct.keys()] } },
+    });
     if (products.length !== requestedByProduct.size) throw new NotFoundException('Có hàng hoá không tồn tại');
     return products;
   }
@@ -181,7 +253,10 @@ export class StockExportsService {
       } catch (error) {
         throw new ConflictException(error instanceof Error ? error.message : 'Không đủ tồn kho');
       }
-      productState.set(product.id, { product, currentStock: Number(product.currentStock) });
+      productState.set(product.id, {
+        product,
+        currentStock: Number(product.currentStock),
+      });
     }
 
     return productState;
@@ -213,7 +288,10 @@ export class StockExportsService {
         profitAmount: voucher.exportType === ExportType.SALE ? roundMoney(revenue - cost) : 0,
       },
     });
-    await tx.product.update({ where: { id: state.product.id }, data: { currentStock: nextStock } });
+    await tx.product.update({
+      where: { id: state.product.id },
+      data: { currentStock: nextStock },
+    });
     await tx.stockMovement.create({
       data: {
         productId: state.product.id,
@@ -235,52 +313,34 @@ export class StockExportsService {
 
   private findMonthlyExportRows(from: Date, to: Date) {
     return this.prisma.stockExportItem.findMany({
-      where: { stockExport: { status: VoucherStatus.CONFIRMED, confirmedAt: { gte: from, lt: to } } },
-      include: { product: true, stockExport: { include: { createdBy: { select: { name: true } } } } },
+      where: {
+        stockExport: {
+          status: VoucherStatus.CONFIRMED,
+          confirmedAt: { gte: from, lt: to },
+        },
+      },
+      include: {
+        product: true,
+        stockExport: { include: { createdBy: { select: { name: true } } } },
+      },
       orderBy: { stockExport: { confirmedAt: 'asc' } },
     });
   }
 
-  private buildExportWorkbook(rows: Awaited<ReturnType<StockExportsService['findMonthlyExportRows']>>) {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Phieu xuat chi tiet');
+  private deliveryVoucherInclude() {
+    return {
+      createdBy: { select: { name: true } },
+      items: { include: { product: { include: { unit: true } } } },
+    } satisfies Prisma.StockExportInclude;
+  }
 
-    sheet.columns = [
-      { header: 'Mã phiếu', key: 'code', width: 18 },
-      { header: 'Ngày xác nhận', key: 'confirmedDate', width: 16 },
-      { header: 'Ngày xuất', key: 'date', width: 16 },
-      { header: 'Loại', key: 'type', width: 14 },
-      { header: 'Người tạo', key: 'user', width: 20 },
-      { header: 'Mã hàng', key: 'productCode', width: 16 },
-      { header: 'Tên hàng', key: 'productName', width: 28 },
-      { header: 'Số lượng', key: 'qty', width: 12 },
-      { header: 'Giá bán', key: 'sale', width: 14 },
-      { header: 'Giá vốn', key: 'cost', width: 14 },
-      { header: 'Thành tiền bán', key: 'revenue', width: 16 },
-      { header: 'Thành tiền vốn', key: 'costAmount', width: 16 },
-      { header: 'Lợi nhuận', key: 'profit', width: 16 },
-    ];
-
-    rows.forEach((row) =>
-      sheet.addRow({
-        code: row.stockExport.code,
-        confirmedDate: row.stockExport.confirmedAt?.toISOString().slice(0, 10) ?? '',
-        date: row.stockExport.exportDate.toISOString().slice(0, 10),
-        type: row.stockExport.exportType,
-        user: row.stockExport.createdBy.name,
-        productCode: row.product.code,
-        productName: row.product.name,
-        qty: Number(row.quantity),
-        sale: Number(row.salePrice),
-        cost: Number(row.costPrice),
-        revenue: Number(row.revenueAmount),
-        costAmount: Number(row.costAmount),
-        profit: Number(row.profitAmount),
-      }),
-    );
-    sheet.getRow(1).font = { bold: true };
-
-    return workbook;
+  private async findExportForFileOrThrow(id: string) {
+    const voucher = await this.prisma.stockExport.findUnique({
+      where: { id },
+      include: this.deliveryVoucherInclude(),
+    });
+    if (!voucher) throw new NotFoundException('Không tìm thấy phiếu xuất');
+    return voucher;
   }
 
   private async findLockedVoucherOrThrow(tx: Prisma.TransactionClient, id: string) {
@@ -292,7 +352,10 @@ export class StockExportsService {
 
   private async findLockedVoucherWithItemsOrThrow(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "StockExport" WHERE id = ${id} FOR UPDATE`);
-    const voucher = await tx.stockExport.findUnique({ where: { id }, include: { items: true } });
+    const voucher = await tx.stockExport.findUnique({
+      where: { id },
+      include: { items: true },
+    });
     if (!voucher) throw new NotFoundException('Không tìm thấy phiếu xuất');
     return voucher;
   }
@@ -301,16 +364,14 @@ export class StockExportsService {
     const uniqueProductIds = [...new Set(productIds)].sort();
     if (uniqueProductIds.length === 0) return;
 
-    await tx.$queryRaw(Prisma.sql`SELECT id FROM "Product" WHERE id IN (${Prisma.join(uniqueProductIds)}) ORDER BY id FOR UPDATE`);
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM "Product" WHERE id IN (${Prisma.join(uniqueProductIds)}) ORDER BY id FOR UPDATE`,
+    );
   }
 
   private ensureDraft(voucher: StockExport, message = 'Phiếu xuất không còn ở trạng thái nháp') {
     if (voucher.status !== VoucherStatus.DRAFT) {
       throw new ConflictException(message);
     }
-  }
-
-  private async nextCode(prefix: string) {
-    return `${prefix}${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-6)}`;
   }
 }

@@ -29,3 +29,6 @@
 - Stock import confirmation increases product stock and updates average cost.
 - Stock export confirmation decreases product stock and snapshots cost/revenue/profit fields.
 - Reports rely on confirmed inventory data; be careful changing voucher status or movement semantics.
+- Catalog mutations and stock adjustments require `ADMIN`; JWT validation re-checks active user state and `updatedAt` on every request.
+- Delivery company/bank details are required runtime environment variables rather than hard-coded service values.
+- Import vouchers can snapshot a supplier and store up to five JPEG/PNG/WebP receipt images in `UPLOAD_DIR`; export vouchers can snapshot a customer.

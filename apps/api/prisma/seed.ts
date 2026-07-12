@@ -6,7 +6,7 @@ const DEFAULT_DEV_ADMIN_PASSWORD = 'admin123456';
 
 async function main() {
   const adminPassword = process.env.ADMIN_PASSWORD ?? getDevelopmentAdminPassword();
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
   await prisma.user.upsert({
     where: { username: 'admin' },
     update: {},
@@ -14,7 +14,11 @@ async function main() {
   });
 
   const unit = await prisma.unit.upsert({ where: { name: 'Cái' }, update: {}, create: { name: 'Cái' } });
-  const category = await prisma.category.upsert({ where: { name: 'Hàng hoá' }, update: {}, create: { name: 'Hàng hoá' } });
+  const category = await prisma.category.upsert({
+    where: { name: 'Hàng hoá' },
+    update: {},
+    create: { name: 'Hàng hoá' },
+  });
   await prisma.product.upsert({
     where: { code: 'SP001' },
     update: {},
