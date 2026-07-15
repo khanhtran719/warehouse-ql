@@ -49,7 +49,7 @@ Build và push web image:
 ```bash
 docker buildx build --platform linux/amd64 \
   --target web \
-  --build-arg VITE_API_URL=$PRODUCTION_API_URL \
+  --build-arg VITE_API_URL=/api \
   -t $DOCKERHUB_NAMESPACE/warehouse-ql-web:$IMAGE_TAG \
   --push .
 ```
